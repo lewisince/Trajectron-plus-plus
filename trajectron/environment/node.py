@@ -101,6 +101,7 @@ class Node(object):
             tr_scene = np.array([tr_scene[0], tr_scene[0]])
         length = tr_scene[1] - tr_scene[0] + 1  # tr is inclusive
         tr, paddingl, paddingu = self.scene_ts_to_node_ts(tr_scene)
+        #import pdb; pdb.set_trace()
         data_array = self.data[tr[0]:tr[1] + 1, state]
         padded_data_array = np.full((length, data_array.shape[1]), fill_value=padding)
         padded_data_array[paddingl:length - paddingu] = data_array

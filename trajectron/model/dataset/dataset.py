@@ -71,6 +71,6 @@ class NodeTypeDataset(data.Dataset):
         if self.augment:
             scene = scene.augment()
             node = scene.get_node_by_id(node.id)
-
+            #import pdb; pdb.set_trace()
         return get_node_timestep_data(self.env, scene, t, node, self.state, self.pred_state,
                                       self.edge_types, self.max_ht, self.max_ft, self.hyperparams)

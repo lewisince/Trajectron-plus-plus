@@ -5,12 +5,14 @@ from .node import MultiNode
 
 
 class Scene(object):
-    def __init__(self, timesteps, map=None, dt=1, name="", frequency_multiplier=1, aug_func=None,  non_aug_scene=None):
+    def __init__(self, timesteps, map=None, dt=1, name="", frequency_multiplier=1, aug_func=None,  non_aug_scene=None, map_name=None):
         self.map = map
         self.timesteps = timesteps
         self.dt = dt
         self.name = name
-
+        #--------------------ADDED-----------------------
+        self.map_name=map_name
+        #------------------------------------------------
         self.nodes = []
 
         self.robot = None

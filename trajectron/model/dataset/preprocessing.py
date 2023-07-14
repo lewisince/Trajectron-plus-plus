@@ -26,6 +26,7 @@ def collate(batch):
     if elem is None:
         return None
     elif isinstance(elem, container_abcs.Sequence):
+        #import pdb; pdb.set_trace()
         if len(elem) == 4: # We assume those are the maps, map points, headings and patch_size
             scene_map, scene_pts, heading_angle, patch_size = zip(*batch)
             if heading_angle[0] is None:
@@ -38,12 +39,14 @@ def collate(batch):
                                                                      rotation=heading_angle)
             return map
         transposed = zip(*batch)
+        #import pdb; pdb.set_trace()
         return [collate(samples) for samples in transposed]
     elif isinstance(elem, container_abcs.Mapping):
         # We have to dill the neighbors structures. Otherwise each tensor is put into
         # shared memory separately -> slow, file pointer overhead
         # we only do this in multiprocessing
         neighbor_dict = {key: [d[key] for d in batch] for key in elem}
+        #import pdb; pdb.set_trace()
         return dill.dumps(neighbor_dict) if torch.utils.data.get_worker_info() else neighbor_dict
     return default_collate(batch)
 
@@ -87,11 +90,19 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
     # Node
     timestep_range_x = np.array([t - max_ht, t])
     timestep_range_y = np.array([t + 1, t + max_ft])
-
+    #import pdb; pdb.set_trace()
     x = node.get(timestep_range_x, state[node.type])
     y = node.get(timestep_range_y, pred_state[node.type])
+    #--------------ADDED--------------
+    unf_state = {'PEDESTRIAN': {'unfiltered_position': ['x','y']},
+                 'VEHICLE': {'unfiltered_position': ['x','y']}
+                }
+    unf_x = node.get(timestep_range_x, unf_state[node.type])
+    #DUBULAR!!
+    #import pdb; pdb.set_trace()
+    #---------------------------------
     first_history_index = (max_ht - node.history_points_at(t)).clip(0)
-
+    
     _, std = env.get_standardize_params(state[node.type], node.type)
     std[0:2] = env.attention_radius[(node.type, node.type)]
     rel_state = np.zeros_like(x[0])
@@ -104,6 +115,9 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
 
     x_t = torch.tensor(x, dtype=torch.float)
     y_t = torch.tensor(y, dtype=torch.float)
+    #--------------ADDED--------------
+    x_unf_t = torch.tensor(unf_x, dtype=torch.float)
+    #---------------------------------   
     x_st_t = torch.tensor(x_st, dtype=torch.float)
     y_st_t = torch.tensor(y_st, dtype=torch.float)
 
@@ -187,9 +201,26 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
 
             patch_size = hyperparams['map_encoder'][node.type]['patch_size']
             map_tuple = (scene_map, map_point, heading_angle, patch_size)
-
+            #import pdb; pdb.set_trace()
+            #--------------ADDED--------------
+    map_name = scene.map_name
+    if map_name == 'boston-seaport':
+        map_num = 1
+    elif map_name == 'singapore-onenorth':
+        map_num = 2
+    elif map_name == 'singapore-queenstown':
+        map_num = 3
+    elif map_name == 'singapore-hollandvillage':
+        map_num = 4
+    else:
+        map_num = 0
+    
+    map_num_t = torch.tensor(map_num, dtype=torch.float)
+            
     return (first_history_index, x_t, y_t, x_st_t, y_st_t, neighbors_data_st,
-            neighbors_edge_value, robot_traj_st_t, map_tuple)
+            neighbors_edge_value, robot_traj_st_t, map_tuple,
+            x_unf_t, map_num_t)
+            #---------------------------------
 
 
 def get_timesteps_data(env, scene, t, node_type, state, pred_state,
@@ -231,4 +262,5 @@ def get_timesteps_data(env, scene, t, node_type, state, pred_state,
                                                     scene_graph=scene_graph))
     if len(out_timesteps) == 0:
         return None
+    #import pdb; pdb.set_trace()
     return collate(batch), nodes, out_timesteps

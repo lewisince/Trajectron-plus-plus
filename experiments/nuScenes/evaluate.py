@@ -139,9 +139,22 @@ if __name__ == "__main__":
                                                z_mode=False,
                                                gmm_mode=False,
                                                full_dist=False)
+                
+                # vel_avg = eval_stg.get_vel(scene,
+                #                                timesteps,
+                #                                ph,
+                #                                num_samples=2000,
+                #                                min_future_timesteps=8,
+                #                                z_mode=False,
+                #                                gmm_mode=False,
+                #                                full_dist=False)
 
                 if not predictions:
                     continue
+
+                # if vel_avg < 8:
+                #     continue
+
 
                 prediction_dict, _, _ = utils.prediction_output_to_trajectories(predictions,
                                                                                 scene.dt,
@@ -170,7 +183,7 @@ if __name__ == "__main__":
                                                                        node_type_enum=env.NodeType,
                                                                        map=None,
                                                                        prune_ph_to_future=False)
-
+                #import pdb; pdb.set_trace()
                 eval_ade_batch_errors = np.hstack((eval_ade_batch_errors, batch_error_dict[args.node_type]['ade']))
                 eval_fde_batch_errors = np.hstack((eval_fde_batch_errors, batch_error_dict[args.node_type]['fde']))
                 eval_kde_nll = np.hstack((eval_kde_nll, batch_error_dict[args.node_type]['kde']))

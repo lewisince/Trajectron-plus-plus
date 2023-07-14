@@ -21,11 +21,13 @@ scene_blacklist = [499, 515, 517]
 
 FREQUENCY = 2
 dt = 1 / FREQUENCY
-data_columns_vehicle = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'heading'], ['x', 'y']])
+#-------------------------ADDED--------------------------
+data_columns_vehicle = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'heading', 'unfiltered_position'], ['x', 'y']])
+#--------------------------------------------------------
 data_columns_vehicle = data_columns_vehicle.append(pd.MultiIndex.from_tuples([('heading', '°'), ('heading', 'd°')]))
 data_columns_vehicle = data_columns_vehicle.append(pd.MultiIndex.from_product([['velocity', 'acceleration'], ['norm']]))
 
-data_columns_pedestrian = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
+data_columns_pedestrian = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'unfiltered_position'], ['x', 'y']])
 
 curv_0_2 = 0
 curv_0_1 = 0
@@ -77,20 +79,25 @@ def augment_scene(scene, angle):
                       [np.sin(alpha), np.cos(alpha)]])
         return M @ pc
 
-    data_columns_vehicle = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'heading'], ['x', 'y']])
+    #-------------------------ADDED--------------------------
+    data_columns_vehicle = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'heading', 'unfiltered_position'], ['x', 'y']])
     data_columns_vehicle = data_columns_vehicle.append(pd.MultiIndex.from_tuples([('heading', '°'), ('heading', 'd°')]))
     data_columns_vehicle = data_columns_vehicle.append(pd.MultiIndex.from_product([['velocity', 'acceleration'], ['norm']]))
 
-    data_columns_pedestrian = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
+    data_columns_pedestrian = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration', 'unfiltered_position'], ['x', 'y']])
+     #--------------------------------------------------------
 
-    scene_aug = Scene(timesteps=scene.timesteps, dt=scene.dt, name=scene.name, non_aug_scene=scene)
-
+#--------------------------------------ADDED------
+    scene_aug = Scene(timesteps=scene.timesteps, map_name=scene.map_name, dt=scene.dt, name=scene.name, non_aug_scene=scene)
+#-------------------------------------------------
     alpha = angle * np.pi / 180
 
     for node in scene.nodes:
         if node.type == 'PEDESTRIAN':
             x = node.data.position.x.copy()
             y = node.data.position.y.copy()
+            x_unf = node.data.unfiltered_position.x.copy()
+            y_unf = node.data.unfiltered_position.y.copy()
 
             x, y = rotate_pc(np.array([x, y]), alpha)
 
@@ -101,6 +108,10 @@ def augment_scene(scene, angle):
 
             data_dict = {('position', 'x'): x,
                          ('position', 'y'): y,
+                         #--------------ADDED--------------
+                         ('unfiltered_position', 'x'): x_unf,
+                         ('unfiltered_position', 'y'): y_unf,
+                         #---------------------------------
                          ('velocity', 'x'): vx,
                          ('velocity', 'y'): vy,
                          ('acceleration', 'x'): ax,
@@ -113,12 +124,16 @@ def augment_scene(scene, angle):
             x = node.data.position.x.copy()
             y = node.data.position.y.copy()
 
+            x_unf = node.data.unfiltered_position.x.copy()
+            y_unf = node.data.unfiltered_position.y.copy()
+
             heading = getattr(node.data.heading, '°').copy()
             heading += alpha
             heading = (heading + np.pi) % (2.0 * np.pi) - np.pi
-
+            # --------------ADDED--------------
             x, y = rotate_pc(np.array([x, y]), alpha)
-
+            #x_unf, y_unf = rotate_pc(np.array([x_unf, y_unf]), alpha)
+            #-----------------------------------
             vx = derivative_of(x, scene.dt)
             vy = derivative_of(y, scene.dt)
             ax = derivative_of(vx, scene.dt)
@@ -132,6 +147,10 @@ def augment_scene(scene, angle):
 
             data_dict = {('position', 'x'): x,
                          ('position', 'y'): y,
+                        #--------------ADDED--------------
+                         ('unfiltered_position', 'x'): x_unf,
+                         ('unfiltered_position', 'y'): y_unf,
+                        #---------------------------------
                          ('velocity', 'x'): vx,
                          ('velocity', 'y'): vy,
                          ('velocity', 'norm'): np.linalg.norm(np.stack((vx, vy), axis=-1), axis=-1),
@@ -142,9 +161,9 @@ def augment_scene(scene, angle):
                          ('heading', 'y'): heading_y,
                          ('heading', '°'): heading,
                          ('heading', 'd°'): derivative_of(heading, dt, radian=True)}
-
+            
             node_data = pd.DataFrame(data_dict, columns=data_columns_vehicle)
-
+            #import pdb; pdb.set_trace()
             node = Node(node_type=node.type, node_id=node.id, data=node_data, first_timestep=node.first_timestep,
                         non_aug_node=node)
 
@@ -206,6 +225,8 @@ def process_scene(ns_scene, env, nusc, data_path):
                                     'node_id': annotation['instance_token'],
                                     'robot': False,
                                     'x': annotation['translation'][0],
+                                    'x_unf': annotation['translation'][0],
+                                    'y_unf': annotation['translation'][1], 
                                     'y': annotation['translation'][1],
                                     'z': annotation['translation'][2],
                                     'length': annotation['size'][0],
@@ -213,6 +234,7 @@ def process_scene(ns_scene, env, nusc, data_path):
                                     'height': annotation['size'][2],
                                     'heading': Quaternion(annotation['rotation']).yaw_pitch_roll[0]})
             data = data.append(data_point, ignore_index=True)
+            #import pdb; pdb.set_trace()
 
         # Ego Vehicle
         our_category = env.NodeType.VEHICLE
@@ -224,6 +246,8 @@ def process_scene(ns_scene, env, nusc, data_path):
                                 'robot': True,
                                 'x': annotation['translation'][0],
                                 'y': annotation['translation'][1],
+                                'x_unf': annotation['translation'][0],
+                                'y_unf': annotation['translation'][1],                                
                                 'z': annotation['translation'][2],
                                 'length': 4,
                                 'width': 1.7,
@@ -250,7 +274,7 @@ def process_scene(ns_scene, env, nusc, data_path):
     data['y'] = data['y'] - y_min
 
     scene = Scene(timesteps=max_timesteps + 1, dt=dt, name=str(scene_id), aug_func=augment)
-
+    #import pdb; pdb.set_trace()
     # Generate Maps
     map_name = nusc.get('log', ns_scene['log_token'])['location']
     nusc_map = NuScenesMap(dataroot=data_path, map_name=map_name)
@@ -279,6 +303,9 @@ def process_scene(ns_scene, env, nusc, data_path):
     type_map['VISUALIZATION'] = GeometricMap(data=map_mask_plot, homography=homography, description=', '.join(layer_names))
 
     scene.map = type_map
+    #--------------ADDED--------------
+    scene.map_name = map_name
+    #---------------------------------
     del map_mask
     del map_mask_pedestrian
     del map_mask_vehicle
@@ -298,6 +325,11 @@ def process_scene(ns_scene, env, nusc, data_path):
         node_values = node_df[['x', 'y']].values
         x = node_values[:, 0]
         y = node_values[:, 1]
+        #--------------ADDED--------------
+        node_unf_values = node_df[['x_unf', 'y_unf']].values
+        x_unf = node_unf_values[:, 0]
+        y_unf = node_unf_values[:, 1]
+        #---------------------------------
         heading = node_df['heading'].values
         if node_df.iloc[0]['type'] == env.NodeType.VEHICLE and not node_id == 'ego':
             # Kalman filter Agent
@@ -338,9 +370,11 @@ def process_scene(ns_scene, env, nusc, data_path):
 
             curvature, pl, _ = trajectory_curvature(np.stack((x, y), axis=-1))
             if pl < 1.0:  # vehicle is "not" moving
-                x = x[0].repeat(max_timesteps + 1)
-                y = y[0].repeat(max_timesteps + 1)
-                heading = heading[0].repeat(max_timesteps + 1)
+                #---------------------------CHANGED------------------------
+                x = x[0].repeat(len(x_unf))
+                y = y[0].repeat(len(x_unf))
+                heading = heading[0].repeat(len(x_unf))
+                #----------------------------------------------------------
             global total
             global curv_0_2
             global curv_0_1
@@ -358,6 +392,19 @@ def process_scene(ns_scene, env, nusc, data_path):
         ax = derivative_of(vx, scene.dt)
         ay = derivative_of(vy, scene.dt)
 
+        #---------------------------ADDED------------------------
+        if len(x_unf) != len(x):
+            x_unf = x_unf[0].repeat(len(x_unf))
+            y_unf = y_unf[0].repeat(len(x_unf))
+            # This originates from an issue in line 352. Just because the SCENE
+            # has max timesteps of 38, the NODE (agent) is not always IN THE SCENE
+            # for the entire length of the scene. They may only be present for the first
+            # 15 frames for example. 
+        #For (near)stationary vehicles, kalman filter seems to add additional timesteps (see scene 2, c 8)
+        # len(x) is 39, len (x_unf) is 16.
+        #--------------------------------------------------------
+
+
         if node_df.iloc[0]['type'] == env.NodeType.VEHICLE:
             v = np.stack((vx, vy), axis=-1)
             v_norm = np.linalg.norm(np.stack((vx, vy), axis=-1), axis=-1, keepdims=True)
@@ -367,6 +414,10 @@ def process_scene(ns_scene, env, nusc, data_path):
 
             data_dict = {('position', 'x'): x,
                          ('position', 'y'): y,
+                         #--------------ADDED--------------
+                         ('unfiltered_position', 'x'): x_unf,
+                         ('unfiltered_position', 'y'): y_unf,
+                         #---------------------------------
                          ('velocity', 'x'): vx,
                          ('velocity', 'y'): vy,
                          ('velocity', 'norm'): np.linalg.norm(np.stack((vx, vy), axis=-1), axis=-1),
@@ -378,9 +429,14 @@ def process_scene(ns_scene, env, nusc, data_path):
                          ('heading', '°'): heading,
                          ('heading', 'd°'): derivative_of(heading, dt, radian=True)}
             node_data = pd.DataFrame(data_dict, columns=data_columns_vehicle)
+            #import pdb; pdb.set_trace()
         else:
             data_dict = {('position', 'x'): x,
                          ('position', 'y'): y,
+                         #--------------ADDED--------------
+                         ('unfiltered_position', 'x'): x_unf,
+                         ('unfiltered_position', 'y'): y_unf,
+                         #---------------------------------
                          ('velocity', 'x'): vx,
                          ('velocity', 'y'): vy,
                          ('acceleration', 'x'): ax,
@@ -388,13 +444,14 @@ def process_scene(ns_scene, env, nusc, data_path):
             node_data = pd.DataFrame(data_dict, columns=data_columns_pedestrian)
 
         node = Node(node_type=node_df.iloc[0]['type'], node_id=node_id, data=node_data, frequency_multiplier=node_frequency_multiplier)
+        #import pdb; pdb.set_trace()
         node.first_timestep = node_df['frame_id'].iloc[0]
         if node_df.iloc[0]['robot'] == True:
             node.is_robot = True
             scene.robot = node
 
         scene.nodes.append(node)
-
+    #import pdb; pdb.set_trace()
     return scene
 
 
@@ -403,7 +460,7 @@ def process_data(data_path, version, output_path, val_split):
     splits = create_splits_scenes()
     train_scenes, val_scenes = train_test_split(splits['train' if 'mini' not in version else 'mini_train'], test_size=val_split)
     train_scene_names = splits['train' if 'mini' not in version else 'mini_train']
-    val_scene_names = []#val_scenes
+    val_scene_names = val_scenes
     test_scene_names = splits['val' if 'mini' not in version else 'mini_val']
 
     ns_scene_names = dict()
@@ -436,6 +493,7 @@ def process_data(data_path, version, output_path, val_split):
                     angles = np.arange(0, 360, 15)
                     for angle in angles:
                         scene.augmented.append(augment_scene(scene, angle))
+                #import pdb; pdb.set_trace()
                 scenes.append(scene)
 
         print(f'Processed {len(scenes):.2f} scenes')

@@ -71,6 +71,10 @@ def main():
     hyperparams['use_map_encoding'] = args.map_encoding
     hyperparams['augment'] = args.augment
     hyperparams['override_attention_radius'] = args.override_attention_radius
+    #---- ADDED ----
+    hyperparams['heatmap_data'] = '../experiments/nuScenes/devkit/python-sdk/tutorials/ten_one_normalized_df_hist_all.csv'
+    hyperparams['grid_data'] = '../experiments/nuScenes/devkit/python-sdk/tutorials/grid_info_all.csv'
+    #---------------
 
     print('-----------------------')
     print('| TRAINING PARAMETERS |')
@@ -87,10 +91,25 @@ def main():
     print('| edge_removal_filter: %s' % args.edge_removal_filter)
     print('| MHL: %s' % hyperparams['minimum_history_length'])
     print('| PH: %s' % hyperparams['prediction_horizon'])
+    # #---- ADDED ----
+    print('| Heatmap Data: %s' % hyperparams['heatmap_data'])
+    print('| Grid Data: %s' % hyperparams['grid_data'])
+    # #---------------
     print('-----------------------')
 
     log_writer = None
     model_dir = None
+
+    # #---- ADDED ----
+    import pandas as pd
+    if hyperparams['heatmap_data']:
+        heatmap_df = pd.read_csv(hyperparams['heatmap_data'])
+        heatmap_tensor = torch.tensor(heatmap_df.values)
+
+    if hyperparams['grid_data']:
+        grid_df = pd.read_csv(hyperparams['grid_data'])
+        grid_tensor = torch.tensor(grid_df.values)
+    #---------------
     if not args.debug:
         # Create the log and model directiory if they're not present.
         model_dir = os.path.join(args.log_dir,
@@ -141,10 +160,12 @@ def main():
                                                      batch_size=args.batch_size,
                                                      shuffle=True,
                                                      num_workers=args.preprocess_workers)
+        
+        #THIS HAS THE UNFILTERED
         train_data_loader[node_type_data_set.node_type] = node_type_dataloader
 
     print(f"Loaded training data from {train_data_path}")
-
+    #import pdb; pdb.set_trace()
     eval_scenes = []
     eval_scenes_sample_probs = None
     if args.eval_every is not None:
@@ -246,16 +267,20 @@ def main():
         model_registrar.to(args.device)
         train_dataset.augment = args.augment
         for node_type, data_loader in train_data_loader.items():
+            #import pdb; pdb.set_trace()
             curr_iter = curr_iter_node_type[node_type]
-            pbar = tqdm(data_loader, ncols=80)
+            pbar = tqdm(data_loader, ncols=80) #This is literally a loading bar.
             for batch in pbar:
+                #import pdb; pdb.set_trace()
                 trajectron.set_curr_iter(curr_iter)
                 trajectron.step_annealers(node_type)
                 optimizer[node_type].zero_grad()
-                train_loss = trajectron.train_loss(batch, node_type)
+                # -------- ADDED HEATMAP_TENSOR -------
+                train_loss = trajectron.train_loss(batch, node_type, heatmap_tensor, grid_tensor)
+                # -------------------------------------
                 pbar.set_description(f"Epoch {epoch}, {node_type} L: {train_loss.item():.2f}")
                 train_loss.backward()
-                # Clipping gradients.
+                # Clipping gradients
                 if hyperparams['grad_clip'] is not None:
                     nn.utils.clip_grad_value_(model_registrar.parameters(), hyperparams['grad_clip'])
                 optimizer[node_type].step()
@@ -265,7 +290,7 @@ def main():
 
                 if not args.debug:
                     log_writer.add_scalar(f"{node_type}/train/learning_rate",
-                                          lr_scheduler[node_type].get_lr()[0],
+                                          lr_scheduler[node_type].get_last_lr()[0],
                                           curr_iter)
                     log_writer.add_scalar(f"{node_type}/train/loss", train_loss, curr_iter)
 
@@ -279,6 +304,7 @@ def main():
         #        VISUALIZATION          #
         #################################
         if args.vis_every is not None and not args.debug and epoch % args.vis_every == 0 and epoch > 0:
+            
             max_hl = hyperparams['maximum_history_length']
             ph = hyperparams['prediction_horizon']
             with torch.no_grad():
@@ -306,6 +332,8 @@ def main():
                                                    ph=ph,
                                                    map=scene.map['VISUALIZATION'] if scene.map is not None else None)
                 ax.set_title(f"{scene.name}-t: {timestep}")
+                #plt.show()
+                #import pdb; pdb.set_trace()
                 log_writer.add_figure('train/prediction', fig, epoch)
 
                 model_registrar.to(args.eval_device)

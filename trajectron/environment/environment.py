@@ -29,6 +29,7 @@ class Environment(object):
         standardize_std_list = list()
         for entity, dims in state.items():
             for dim in dims:
+                #import pdb; pdb.set_trace()
                 standardize_mean_list.append(self.standardization[node_type][entity][dim]['mean'])
                 standardize_std_list.append(self.standardization[node_type][entity][dim]['std'])
         standardize_mean = np.stack(standardize_mean_list)
